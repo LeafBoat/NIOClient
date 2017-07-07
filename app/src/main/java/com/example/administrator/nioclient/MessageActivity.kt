@@ -8,12 +8,17 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.TextView
+import com.example.administrator.nioclient.chat.Client
+import com.example.administrator.nioclient.chat.ClientHandler
 
 class MessageActivity : AppCompatActivity() {
     private var messageET: EditText? = null
     private var recyclerView: RecyclerView? = null
     var adapter: MyAdapter? = null
     var friendid: String = ""
+    private var selfid: String? = ""
+    var client: Client? = null
+    var messages: ArrayList<Message>? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_message)
@@ -26,30 +31,32 @@ class MessageActivity : AppCompatActivity() {
         messageET = findViewById(R.id.message) as EditText
     }
 
-    private var selfid: String? = ""
-    private var content: String? = ""
 
     private fun initdata() {
         friendid = intent.getStringExtra("friend")
         selfid = intent.getStringExtra("account")
-        adapter = MyAdapter(this, ArrayList())
+        messages = ArrayList()
+        adapter = MyAdapter(this, messages!!)
         recyclerView!!.adapter = adapter
-        ClientHandler.setReadListener { msg ->
-            var message = Message()
-            message.id = friendid
-            message.msg = msg
-            adapter!!.notify(message)
-            recyclerView!!.smoothScrollToPosition(adapter!!.itemCount)
+        client = Client.Builder.getBuilder().build()
+        client!!.setReplyListener { msg ->
+            runOnUiThread {
+                var message = Message()
+                var position = msg.indexOf(":")
+                message.id = msg.substring(0, position)
+                message.msg = msg.substring(position + 1)
+                adapter!!.notify(message)
+                recyclerView!!.smoothScrollToPosition(adapter!!.itemCount)
+            }
         }
     }
 
     fun send(v: View) {
-        content = messageET!!.text.toString()
-        var message = friendid + "\r\nsend\r\n" + content
-        MessageParser.sendMessage(MessageParser.getSocketChannel(), message)
+        var message = messageET!!.text.toString()
+        client!!.sendMessage(selfid, friendid, message)
         var msg = Message()
         msg.id = selfid
-        msg.msg = content
+        msg.msg = message
         adapter!!.notify(msg)
         recyclerView!!.smoothScrollToPosition(adapter!!.itemCount)
     }
@@ -66,7 +73,7 @@ class MyAdapter(activity: MessageActivity, messages: ArrayList<Message>) : Recyc
 
     override fun onBindViewHolder(holder: ViewHolder?, position: Int) {
         var itemView = holder!!.itemView as TextView
-        var message = messages.get(position)
+        var message = messages[position]
         if (message.id.equals(activity.friendid)) {
             itemView.gravity = Gravity.RIGHT
             itemView.text = message.msg + "  " + message.id
